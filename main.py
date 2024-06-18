@@ -78,6 +78,7 @@ print('################################# Phase I ###############################
 best_loss = None
 for epoch in range(args.pre_epochs):
 
+    model.train()
     total_loss, total_vi_loss, total_w_loss, total_a_loss = 0, 0, 0, 0
     for batch_vi, batch_w, batch_a in DataBatch(high_vi, high_w, high_a, args.batchSize):
         
@@ -108,6 +109,7 @@ model.load_state_dict(torch.load(args.model_path + args.run_tag + 'pretrain_mode
 print('################################# Phase II #################################')
 for epoch in range(args.epochs):
 
+    model.train()
     total_loss, total_vi_loss, total_w_loss, total_a_loss = 0, 0, 0, 0
     for batch_vi, batch_w, batch_a in DataBatch(high_vi, high_w, high_a, args.batchSize):
 
@@ -148,42 +150,44 @@ for epoch in range(args.epochs):
     torch.save(model.state_dict(), args.model_path + args.run_tag + 'model')
 
     # test
+    model.eval()
     total_loss, total_vi_loss, total_w_loss, total_a_loss = 0, 0, 0, 0
     denoise_vi_list, vi_w_list, vi_a_list = [], [], []
-    for batch_vi, batch_w, batch_a in DataBatch(low_vi, low_w, low_a, args.batchSize, shuffle=False):
+    with torch.no_grad():
+        for batch_vi, batch_w, batch_a in DataBatch(low_vi, low_w, low_a, args.batchSize, shuffle=False):
 
-        input = torch.cat((batch_vi, batch_w, batch_a), dim=-1)
-        denoise_vi = model(input)
+            input = torch.cat((batch_vi, batch_w, batch_a), dim=-1)
+            denoise_vi = model(input)
 
-        vi_w = compute_w(denoise_vi)
-        vi_a = compute_a(denoise_vi)
+            vi_w = compute_w(denoise_vi)
+            vi_a = compute_a(denoise_vi)
 
-        denoise_vi_list.append(denoise_vi)
-        vi_w_list.append(vi_w)
-        vi_a_list.append(vi_a)
+            denoise_vi_list.append(denoise_vi)
+            vi_w_list.append(vi_w)
+            vi_a_list.append(vi_a)
 
-        vi_loss = mse(denoise_vi, batch_vi)
-        w_loss = mse(vi_w, batch_w)
-        a_loss = mse(vi_a, batch_a)
-        
-        loss = w_loss + a_loss
+            vi_loss = mse(denoise_vi, batch_vi)
+            w_loss = mse(vi_w, batch_w)
+            a_loss = mse(vi_a, batch_a)
+            
+            loss = w_loss + a_loss
 
-        total_loss += len(batch_vi) * loss.item()
-        total_vi_loss += len(batch_vi) * vi_loss.item()
+            total_loss += len(batch_vi) * loss.item()
+            total_vi_loss += len(batch_vi) * vi_loss.item()
 
-    total_loss /= len(low_vi)
-    total_vi_loss /= len(low_vi)
+        total_loss /= len(low_vi)
+        total_vi_loss /= len(low_vi)
 
-    denoise_vi = torch.cat(denoise_vi_list)
-    vi_w = torch.cat(vi_w_list)
-    vi_a = torch.cat(vi_a_list)
+        denoise_vi = torch.cat(denoise_vi_list)
+        vi_w = torch.cat(vi_w_list)
+        vi_a = torch.cat(vi_a_list)
 
-    total_w_loss = mse(vi_w, low_w).item()
-    total_a_loss = mse(vi_a, low_a).item()
+        total_w_loss = mse(vi_w, low_w).item()
+        total_a_loss = mse(vi_a, low_a).item()
 
-    total_w_mae = mae(vi_w, low_w).item()
-    total_a_mae = mae(vi_a, low_a).item()
+        total_w_mae = mae(vi_w, low_w).item()
+        total_a_mae = mae(vi_a, low_a).item()
 
-    print('test total_loss: %.4f vi_loss: %.4f w_loss: %.4f a_loss: %.4f w_mae: %.4f a_mae: %.4f' % \
-        (total_loss, total_vi_loss, total_w_loss, total_a_loss, total_w_mae, total_a_mae))
-    wandb.log({"vi_loss": total_vi_loss, "w_loss": total_w_loss, "a_loss": total_a_loss, "w_mae": total_w_mae, "a_mae": total_a_mae})
+        print('test total_loss: %.4f vi_loss: %.4f w_loss: %.4f a_loss: %.4f w_mae: %.4f a_mae: %.4f' % \
+            (total_loss, total_vi_loss, total_w_loss, total_a_loss, total_w_mae, total_a_mae))
+        wandb.log({"vi_loss": total_vi_loss, "w_loss": total_w_loss, "a_loss": total_a_loss, "w_mae": total_w_mae, "a_mae": total_a_mae})
